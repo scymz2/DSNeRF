@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm, trange
+from PIL import Image
 
 import matplotlib.pyplot as plt
 
@@ -46,7 +47,7 @@ def batchify(fn, chunk):
     return ret
 
 
-def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
+def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*32):
     """Prepares inputs and applies network 'fn'.
     """
     inputs_flat = torch.reshape(inputs, [-1, inputs.shape[-1]])
@@ -63,7 +64,7 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     return outputs
 
 
-def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
+def batchify_rays(rays_flat, chunk=1024*16, **kwargs):
     """Render rays in smaller minibatches to avoid OOM.
     """
     all_ret = {}
@@ -78,7 +79,7 @@ def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
     return all_ret
 
 
-def render(H, W, focal, chunk=1024*32, rays=None, c2w=None, ndc=True,
+def render(H, W, focal, chunk=1024*16, rays=None, c2w=None, ndc=True,
                   near=0., far=1.,
                   use_viewdirs=False, c2w_staticcam=None, depths=None,
                   **kwargs):
@@ -182,14 +183,16 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
             rgb8[np.isnan(rgb8)] = 0
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
-            depth = depth.cpu().numpy()
-            print("max:", np.nanmax(depth))
+            depth_uint8 = depth.cpu().numpy()
+            print("max:", np.nanmax(depth_uint8))
+            depth_uint8 = depth_uint8.astype(np.uint8)
+            depth_uint8 = Image.fromarray(depth_uint8)
             # depth = depth / 5 * 255
             # depth_color = cv2.applyColorMap(depth.astype(np.uint8), cv2.COLORMAP_JET)[:,:,::-1]
             # depth_color[np.isnan(depth_color)] = 0
             # imageio.imwrite(os.path.join(savedir, '{:03d}_depth.png'.format(i)), depth_color)
-            imageio.imwrite(os.path.join(savedir, '{:03d}_depth.png'.format(i)), depth)
-            np.savez(os.path.join(savedir, '{:03d}.npz'.format(i)), rgb=rgb.cpu().numpy(), disp=disp.cpu().numpy(), acc=acc.cpu().numpy(), depth=depth)
+            imageio.imwrite(os.path.join(savedir, '{:03d}_depth.png'.format(i)), depth_uint8)
+            np.savez(os.path.join(savedir, '{:03d}.npz'.format(i)), rgb=rgb.cpu().numpy(), disp=disp.cpu().numpy(), acc=acc.cpu().numpy(), depth=depth_uint8)
 
 
     rgbs = np.stack(rgbs, 0)
@@ -498,9 +501,9 @@ def config_parser():
                         help='learning rate')
     parser.add_argument("--lrate_decay", type=int, default=250, 
                         help='exponential learning rate decay (in 1000 steps)')
-    parser.add_argument("--chunk", type=int, default=1024*32, 
+    parser.add_argument("--chunk", type=int, default=1024*16, 
                         help='number of rays processed in parallel, decrease if running out of memory')
-    parser.add_argument("--netchunk", type=int, default=1024*64, 
+    parser.add_argument("--netchunk", type=int, default=1024*32, 
                         help='number of pts sent through network in parallel, decrease if running out of memory')
     parser.add_argument("--no_batching", action='store_true', 
                         help='only take random rays from 1 image at a time')

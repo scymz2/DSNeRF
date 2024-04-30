@@ -4,6 +4,7 @@ from pathlib import Path
 from colmapUtils.read_write_model import *
 from colmapUtils.read_write_dense import *
 import json
+import logging
 
 
 ########## Slightly modified version of LLFF data loading code 
@@ -440,7 +441,8 @@ def load_sensor_depth(basedir, factor=8, bd_factor=.75):
 
 def load_colmap_llff(basedir):
     basedir = Path(basedir)
-
+    current_directory = os.getcwd()
+    #logging.error(f'Current Directory: {current_directory}')
     train_imgs = np.load(basedir / 'train_images.npy')
     test_imgs = np.load(basedir / 'test_images.npy')
     train_poses = np.load(basedir / 'train_poses.npy')
