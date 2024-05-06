@@ -27,10 +27,10 @@ class Embedder:
         
     def create_embedding_fn(self):
         embed_fns = []
-        d = self.kwargs['input_dims']
-        out_dim = 0
-        if self.kwargs['include_input']:
-            embed_fns.append(lambda x : x)
+        d = self.kwargs['input_dims'] # 3
+        out_dim = 0 # 编码后的数据维度
+        if self.kwargs['include_input']: # 是否包含原始输入，包含原始输入的话维度 + 3
+            embed_fns.append(lambda x : x) # 这样的表达方式将embed_fns作为一个函数列表
             out_dim += d
             
         max_freq = self.kwargs['max_freq_log2']
@@ -43,6 +43,8 @@ class Embedder:
             
         for freq in freq_bands:
             for p_fn in self.kwargs['periodic_fns']:
+                # p_fn=p_fn 和 freq=freq 这部分在定义 lambda 函数时，实际上将当前循环中的 p_fn 和 freq 的值作为默认参数值捕获并保存下来。
+                # 这意味着，即使外部循环的变量 p_fn 和 freq 在未来的迭代中改变了，这些 lambda 函数中捕获的值仍然保持当时定义它们的那一刻的值
                 embed_fns.append(lambda x, p_fn=p_fn, freq=freq : p_fn(x * freq))
                 out_dim += d
                     
@@ -54,6 +56,11 @@ class Embedder:
 
 
 def get_embedder(multires, i=0):
+    # multi resolution代表的是位置编码中使用的最高频率，paper中为10
+    # 而 i 通常用于指定特定的嵌入类型或层级。
+    # 如果参数 i 被设置为 -1，函数直接返回一个 nn.Identity() 层和数字 3
+    # nn.Identity() 是一个恒等转换，即输出等于输入，这在某些情况下可以用来省略位置编码过程。
+    # 3 可能表示输入数据的维度（如三维空间坐标）
     if i == -1:
         return nn.Identity(), 3
     
@@ -67,6 +74,8 @@ def get_embedder(multires, i=0):
     }
     
     embedder_obj = Embedder(**embed_kwargs)
+    # 这里定义了一个匿名函数（lambda 函数），用于将输入 x 传递给 embedder_obj 对象的 embed 方法。
+    # 这样做使得每次调用 embed 都会对输入数据 x 应用定义好的位置编码。
     embed = lambda x, eo=embedder_obj : eo.embed(x)
     return embed, embedder_obj.out_dim
 
@@ -74,7 +83,16 @@ def get_embedder(multires, i=0):
 # Model
 class NeRF(nn.Module):
     def __init__(self, D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips=[4], use_viewdirs=False):
-        """ 
+        """
+        初始化 NeRF 网络。
+        参数:
+        - D: 网络的深度，即网络中线性层的数量。
+        - W: 每个线性层的宽度，即神经元数或特征维数。
+        - input_ch: 输入点的通道数。
+        - input_ch_views: 视角依赖的输入通道数。
+        - output_ch: 输出通道数。
+        - skips: 跳连层的索引列表。
+        - use_viewdirs: 是否使用视角方向作为额外的输入。
         """
         super(NeRF, self).__init__()
         self.D = D
@@ -84,10 +102,12 @@ class NeRF(nn.Module):
         self.skips = skips
         self.use_viewdirs = use_viewdirs
         
+        # 点特征变换层
         self.pts_linears = nn.ModuleList(
             [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)])
         
         ### Implementation according to the official code release (https://github.com/bmild/nerf/blob/master/run_nerf_helpers.py#L104-L105)
+        # 视角方向的处理层，根据官方代码只使用一层变换
         self.views_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W//2)])
 
         ### Implementation according to the paper
@@ -95,33 +115,41 @@ class NeRF(nn.Module):
         #     [nn.Linear(input_ch_views + W, W//2)] + [nn.Linear(W//2, W//2) for i in range(D//2)])
         
         if use_viewdirs:
+            # 如果使用视角方向，分别定义用于RGB和透明度(alpha)的线性层
             self.feature_linear = nn.Linear(W, W)
             self.alpha_linear = nn.Linear(W, 1)
             self.rgb_linear = nn.Linear(W//2, 3)
         else:
+            # 不使用视角方向时，直接输出预定通道数
             self.output_linear = nn.Linear(W, output_ch)
 
     def forward(self, x):
+        # 将输入数据分为位置和视角两部分
         input_pts, input_views = torch.split(x, [self.input_ch, self.input_ch_views], dim=-1)
         h = input_pts
+        
+        # 通过点特征层处理位置数据
         for i, l in enumerate(self.pts_linears):
             h = self.pts_linears[i](h)
             h = F.relu(h)
             if i in self.skips:
+                # 如果层在跳连列表中，将输入点数据与当前层输出连接
                 h = torch.cat([input_pts, h], -1)
 
+        # 处理视角方向数据
         if self.use_viewdirs:
-            alpha = self.alpha_linear(h)
-            feature = self.feature_linear(h)
-            h = torch.cat([feature, input_views], -1)
+            alpha = self.alpha_linear(h) # 计算透明度
+            feature = self.feature_linear(h) # 提取特征
+            h = torch.cat([feature, input_views], -1) # 将视角数据与特征连接
         
             for i, l in enumerate(self.views_linears):
                 h = self.views_linears[i](h)
                 h = F.relu(h)
 
-            rgb = self.rgb_linear(h)
-            outputs = torch.cat([rgb, alpha], -1)
+            rgb = self.rgb_linear(h) # 计算RGB颜色
+            outputs = torch.cat([rgb, alpha], -1) # 将颜色和透明度合并为最终输出
         else:
+            # 不使用视角方向，直接从位置特征输出结果
             outputs = self.output_linear(h)
 
         return outputs    

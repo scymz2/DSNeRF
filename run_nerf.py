@@ -231,13 +231,17 @@ def render_test_ray(rays_o, rays_d, hwf, ndc, near, far, use_viewdirs, N_samples
 def create_nerf(args):
     """Instantiate NeRF's MLP model.
     """
+    # positional encoding 位置编码
+    # embed_fn 编码方程 input_ch 输入通道数（60 或 63）
+    # multires 多分辨率的数量，也就是位置编码频率的数量， 默认为10, i_embed 是否启用位置编码
     embed_fn, input_ch = get_embedder(args.multires, args.i_embed)
 
     input_ch_views = 0
     embeddirs_fn = None
+    # 是否启用视角编码
     if args.use_viewdirs:
         embeddirs_fn, input_ch_views = get_embedder(args.multires_views, args.i_embed)
-    output_ch = 5 if args.N_importance > 0 else 4
+    output_ch = 5 if args.N_importance > 0 else 4 # (rgb, sigma, depth, weights) N_importance附加的细样本数
     skips = [4]
     if args.alpha_model_path is None:
         model = NeRF(D=args.netdepth, W=args.netwidth,
@@ -495,38 +499,51 @@ def config_parser():
                         help='layers in fine network')
     parser.add_argument("--netwidth_fine", type=int, default=256, 
                         help='channels per layer in fine network')
+    # batch size 光束的数量
     parser.add_argument("--N_rand", type=int, default=32*32*4, 
                         help='batch size (number of random rays per gradient step)')
     parser.add_argument("--lrate", type=float, default=5e-4, 
                         help='learning rate')
     parser.add_argument("--lrate_decay", type=int, default=250, 
                         help='exponential learning rate decay (in 1000 steps)')
+    # 并行处理的光线数量
     parser.add_argument("--chunk", type=int, default=1024*16, 
                         help='number of rays processed in parallel, decrease if running out of memory')
+    # 并行发送的点数
     parser.add_argument("--netchunk", type=int, default=1024*32, 
                         help='number of pts sent through network in parallel, decrease if running out of memory')
+    # 一次只能从一张图片中获取随机光线
     parser.add_argument("--no_batching", action='store_true', 
                         help='only take random rays from 1 image at a time')
+    # 不要从保存的模型中加载权重
     parser.add_argument("--no_reload", action='store_true', 
                         help='do not reload weights from saved ckpt')
+    # 为粗网络重新加载特定的权重
     parser.add_argument("--ft_path", type=str, default=None, 
                         help='specific weights npy file to reload for coarse network')
 
     # rendering options
+    # 每条射线的粗样本数
     parser.add_argument("--N_samples", type=int, default=64, 
                         help='number of coarse samples per ray')
+    # 每条射线附加的细样本数
     parser.add_argument("--N_importance", type=int, default=0,
                         help='number of additional fine samples per ray')
+    # 抖动
     parser.add_argument("--perturb", type=float, default=1.,
                         help='set to 0. for no jitter, 1. for jitter')
     parser.add_argument("--use_viewdirs", action='store_true', 
                         help='use full 5D input instead of 3D')
+    # 默认位置编码
     parser.add_argument("--i_embed", type=int, default=0, 
                         help='set 0 for default positional encoding, -1 for none')
+    # 多分辨率
     parser.add_argument("--multires", type=int, default=10, 
                         help='log2 of max freq for positional encoding (3D location)')
+    # 2D方向的多分辨率
     parser.add_argument("--multires_views", type=int, default=4, 
                         help='log2 of max freq for positional encoding (2D direction)')
+    # 噪音方差
     parser.add_argument("--raw_noise_std", type=float, default=0., 
                         help='std dev of noise added to regularize sigma_a output, 1e0 recommended')
 
@@ -629,6 +646,7 @@ def config_parser():
 def train():
 
     parser = config_parser()
+    # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
     if args.dataset_type == 'colmap_llff':

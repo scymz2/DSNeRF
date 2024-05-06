@@ -1,0 +1,21 @@
+由于我们使用的不是colmap_llff格式，而是llff格式我们训练需要使用以下命令：
+
+python run_nerf.py --dataset_type llff --datadir ./data/llff/pothole
+
+--render_only   直接加载权重并渲染
+--render_test   渲染测试图
+--render_train  渲染训练图
+--render_mypath 渲染目标路径
+--render_factor 降采样图像进行渲染
+
+multires default=10
+multires_views default=4
+
+
+llff数据的流程主要是这样的：
+train() -> 'llff' -> load_colmap_depth -> load_llff_data [_load_data]
+-> create_nerf -> get_embedder -> 
+
+基础知识：
+1.在图形学中，z轴通常定义为摄像机的视线方向，而Y轴定义为摄像机的上方向。
+2. 

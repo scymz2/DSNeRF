@@ -272,6 +272,7 @@ def gen_poses(basedir, match_type, factors=None):
     print( 'Post-colmap')
     
     poses, pts3d, perm = load_colmap_data(basedir)
+
     
     save_poses(basedir, poses, pts3d, perm)
     
