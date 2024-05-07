@@ -651,7 +651,7 @@ def train():
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
-    wandb.watch()
+    wandb.init(project="nerf", config=args)
     if args.dataset_type == 'colmap_llff':
         train_imgs, test_imgs, train_poses, test_poses, render_poses, depth_gts, bds = load_colmap_llff(args.datadir)
         poses = np.concatenate([train_poses, test_poses], axis=0)
@@ -1161,5 +1161,4 @@ def train():
 if __name__=='__main__':
     # torch.set_default_tensor_type('torch.cuda.FloatTensor')
     wandb.login()
-    wandb.init(project="nerf", config=args)
     train()
