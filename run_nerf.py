@@ -647,12 +647,11 @@ def config_parser():
 
 def train():
 
-    wandb.init(project="nerf", entity="mochuanzhan", config=args)
-
     parser = config_parser()
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
+    wandb.watch()
     if args.dataset_type == 'colmap_llff':
         train_imgs, test_imgs, train_poses, test_poses, render_poses, depth_gts, bds = load_colmap_llff(args.datadir)
         poses = np.concatenate([train_poses, test_poses], axis=0)
@@ -767,6 +766,9 @@ def train():
 
     # Create nerf model
     render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args)
+
+    model = render_kwargs_train['network_fn']
+    wandb.watch(model, log='all', log_freq=10)
 
 
     global_step = start
@@ -1158,5 +1160,6 @@ def train():
 
 if __name__=='__main__':
     # torch.set_default_tensor_type('torch.cuda.FloatTensor')
-
+    wandb.login()
+    wandb.init(project="nerf", config=args)
     train()
