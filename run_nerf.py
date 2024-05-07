@@ -28,6 +28,8 @@ from utils.generate_renderpath import generate_renderpath
 import cv2
 # import time
 
+import wandb
+
 # concate_time, iter_time, split_time, loss_time, backward_time = [], [], [], [], []
 
 
@@ -49,7 +51,7 @@ def batchify(fn, chunk):
 
 def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*32):
     """Prepares inputs and applies network 'fn'.
-    """
+    """853528d3d353f19d985f0f2f8f197c2ce6a28a51
     inputs_flat = torch.reshape(inputs, [-1, inputs.shape[-1]])
     embedded = embed_fn(inputs_flat)
 
@@ -645,6 +647,8 @@ def config_parser():
 
 def train():
 
+    wandb.init(project="nerf", entity="mochuanzhan", config=args)
+
     parser = config_parser()
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
@@ -1027,6 +1031,8 @@ def train():
         loss.backward()
         optimizer.step()
 
+        wandb.log({'Loss': loss.item(), 'PSNR': psnr.item(), 'Step': i})
+
         # timer_backward = time.perf_counter()
         # print('\nconcate:',timer_concate-timer_0)
         # print('iter',timer_iter-timer_concate)
@@ -1070,6 +1076,7 @@ def train():
                 'optimizer_state_dict': optimizer.state_dict(),
             }, path)
             print('Saved checkpoints at', path)
+            wandb.save(path)
 
         if args.i_video > 0 and i%args.i_video==0 and i > 0:
             # Turn on testing mode
