@@ -51,7 +51,7 @@ def batchify(fn, chunk):
 
 def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*32):
     """Prepares inputs and applies network 'fn'.
-    """853528d3d353f19d985f0f2f8f197c2ce6a28a51
+    """
     inputs_flat = torch.reshape(inputs, [-1, inputs.shape[-1]])
     embedded = embed_fn(inputs_flat)
 
@@ -647,12 +647,11 @@ def config_parser():
 
 def train():
 
-    wandb.init(project="nerf", entity="mochuanzhan", config=args)
-
     parser = config_parser()
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
+    wandb.init(project="nerf", config=args)
     if args.dataset_type == 'colmap_llff':
         train_imgs, test_imgs, train_poses, test_poses, render_poses, depth_gts, bds = load_colmap_llff(args.datadir)
         poses = np.concatenate([train_poses, test_poses], axis=0)
@@ -767,6 +766,9 @@ def train():
 
     # Create nerf model
     render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args)
+
+    model = render_kwargs_train['network_fn']
+    wandb.watch(model, log='all', log_freq=10)
 
 
     global_step = start
@@ -1158,5 +1160,5 @@ def train():
 
 if __name__=='__main__':
     # torch.set_default_tensor_type('torch.cuda.FloatTensor')
-
+    wandb.login()
     train()
