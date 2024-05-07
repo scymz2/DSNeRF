@@ -245,6 +245,7 @@ def create_nerf(args):
         embeddirs_fn, input_ch_views = get_embedder(args.multires_views, args.i_embed)
     output_ch = 5 if args.N_importance > 0 else 4 # (rgb, sigma, depth, weights) N_importance附加的细样本数
     skips = [4]
+    # 如果不存在现有模型就创建一个新的
     if args.alpha_model_path is None:
         model = NeRF(D=args.netdepth, W=args.netwidth,
                     input_ch=input_ch, output_ch=output_ch, skips=skips,
@@ -858,6 +859,8 @@ def train():
             print('get depth rays')
             rays_depth_list = []
             for i in i_train:
+                print("Number of poses available:", len(poses))
+                print("Current index being accessed:", i)
                 rays_depth = np.stack(get_rays_by_coord_np(H, W, focal, poses[i,:3,:4], depth_gts[i]['coord']), axis=0) # 2 x N x 3
                 # print(rays_depth.shape)
                 rays_depth = np.transpose(rays_depth, [1,0,2])

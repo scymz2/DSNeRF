@@ -274,6 +274,18 @@ class NeRF_RGB(nn.Module):
 
 # Ray helpers
 def get_rays(H, W, focal, c2w):
+    """
+    Generate rays for all pixels in the image.
+    Args:
+        H: Height of the image.
+        W: Width of the image.
+        focal: Focal length of the camera.
+        c2w: Camera-to-world matrix.
+    
+    Returns:
+        rays_o: Origin of the rays. Shape: (H, W, 3)
+        rays_d: Direction of the rays. Shape: (H, W, 3)
+    """
     i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H))  # pytorch's meshgrid has indexing='ij'
     i = i.t()
     j = j.t()
@@ -286,6 +298,19 @@ def get_rays(H, W, focal, c2w):
 
 
 def get_rays_np(H, W, focal, c2w):
+    """
+    Generate rays for all pixels in the image.
+    
+    Args:
+        H: Height of the image.
+        W: Width of the image.
+        focal: Focal length of the camera.
+        c2w: Camera-to-world matrix.
+        
+        Returns:
+        rays_o: Origin of the rays. Shape: (H, W, 3)
+        rays_d: Direction of the rays. Shape: (H, W, 3)
+    """
     i, j = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing='xy') # i: H x W, j: H x W
     dirs = np.stack([(i-W*.5)/focal, -(j-H*.5)/focal, -np.ones_like(i)], -1) # dirs: H x W x 3
     # Rotate ray directions from camera frame to the world frame
