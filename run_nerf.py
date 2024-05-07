@@ -859,7 +859,9 @@ def train():
             print('get depth rays')
             rays_depth_list = []
             for i in i_train:
+                print(i_train)
                 print("Number of poses available:", len(poses))
+                print("Number of depth_gts available:", len(depth_gts))
                 print("Current index being accessed:", i)
                 rays_depth = np.stack(get_rays_by_coord_np(H, W, focal, poses[i,:3,:4], depth_gts[i]['coord']), axis=0) # 2 x N x 3
                 # print(rays_depth.shape)
