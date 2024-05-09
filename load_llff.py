@@ -67,11 +67,13 @@ def _minify(basedir, factors=[], resolutions=[]):
         
 def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     
-    # 存放数据集的位姿和边界信息(深度范围) [images_num,17] eg:[20,17]
+    # 存放数据集的位姿和边界信息(深度范围) [images_num,17] eg:[20,17] 最后两位存储边界信息
     poses_arr = np.load(os.path.join(basedir, 'poses_bounds.npy'))
 
     # [images_num,17]--->[3,5,images_num] eg:[3,5,20]
     # 3×3是旋转矩阵R,3×1(第4列)是平移矩阵T,3×1(第5列)是h,w,f
+    # reshape(-1,3,5) -1表示将自动计算第一个维度的大小，所以这步之后数组变成[images_num, 3, 5]
+    # transpose([1,2,0])则表示将数组的维度按照提供的顺序调换， 所以数组维度的结果如下
     poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1,2,0]) # 3 x 5 x N
 
     # bounds 边界(深度)范围[2,images_num] eg:[2,20]
@@ -114,8 +116,10 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         return
     
     sh = imageio.imread(imgfiles[0]).shape
-    poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1])
-    poses[2, 4, :] = poses[2, 4, :] * 1./factor
+    # poses: [3 5 N], 不用管数组形状如何变化，我们按照原来的方式访问，只不过改一下顺序，
+    # 在原来的[N,3,5]中，我们访问hw是 [:, :2, 4]
+    poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1]) # 更新相机的内参矩阵中与图像尺寸有关的部分, 修改h,w
+    poses[2, 4, :] = poses[2, 4, :] * 1./factor # 位姿矩阵的第四列的第三行，这通常对应于相机内参矩阵中的焦距, 修改f
     
     if not load_imgs:
         return poses, bds
