@@ -131,7 +131,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         else:
             return imageio.imread(f)
         
-    imgs = imgs = [imread(f)[...,:3]/255. for f in imgfiles]
+    imgs = [imread(f)[...,:3]/255. for f in imgfiles]
     imgs = np.stack(imgs, -1)  
     
     print('Loaded image data', imgs.shape, poses[:,-1,0])
@@ -324,7 +324,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     poses = np.moveaxis(poses, -1, 0).astype(np.float32) # [N,3,5]
     imgs = np.moveaxis(imgs, -1, 0).astype(np.float32)   # [N,h,w,c]
     images = imgs
-    bds = np.moveaxis(bds, -1, 0).astype(np.float32)     # [N,2]
+    bds = np.moveaxis(bds, -1, 0).astype(np.float32)     # [N,2] 
     print("bds:", bds[0])
     
     # Rescale if bd_factor is provided
@@ -403,11 +403,11 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
 def get_poses(images):
     poses = []
     for i in images:
-        R = images[i].qvec2rotmat()
-        t = images[i].tvec.reshape([3,1])
+        R = images[i].qvec2rotmat() # 从四元数（`qvec`）转换得到旋转矩阵
+        t = images[i].tvec.reshape([3,1]) # 获取平移向量
         bottom = np.array([0,0,0,1.]).reshape([1,4])
-        w2c = np.concatenate([np.concatenate([R, t], 1), bottom], 0)
-        c2w = np.linalg.inv(w2c)
+        w2c = np.concatenate([np.concatenate([R, t], 1), bottom], 0) # 和平移向量水平拼接得到相机位姿矩阵，垂直拼接bottom
+        c2w = np.linalg.inv(w2c) # 求逆矩阵
         poses.append(c2w)
     return np.array(poses)
 
@@ -424,7 +424,7 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
     print("Mean Projection Error:", Err_mean)
     
     # 获取相机姿态
-    poses = get_poses(images)
+    poses = get_poses(images) # get_poses函数用于从images.bin文件中直接获取相机位姿，_load_data则会考虑图像的尺寸和缩放因子
     _, bds_raw, _ = _load_data(basedir, factor=factor) # factor=8 downsamples original imgs by 8x
     bds_raw = np.moveaxis(bds_raw, -1, 0).astype(np.float32)
     # print(bds_raw.shape)
@@ -438,6 +438,7 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
 
     # 初始化数据列表，用于存储处理后的深度信息
     data_list = []
+    zero_depth_ids = []
     for id_im in range(1, len(images)+1):
         depth_list = []
         coord_list = []
@@ -463,10 +464,11 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
             print(id_im, len(depth_list), np.min(depth_list), np.max(depth_list), np.mean(depth_list))
             data_list.append({"depth":np.array(depth_list), "coord":np.array(coord_list), "error":np.array(weight_list)})
         else:
+            zero_depth_ids.append(id_im)
             print(id_im, len(depth_list))
     # json.dump(data_list, open(data_file, "w"))
     np.save(data_file, data_list)
-    return data_list
+    return data_list, zero_depth_ids
 
 def load_sensor_depth(basedir, factor=8, bd_factor=.75):
     data_file = Path(basedir) / 'colmap_depth.npy'
