@@ -305,7 +305,7 @@ def spherify_poses(poses, bds):
     return poses_reset, new_poses, bds
     
 
-def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=False, path_zflat=False):
+def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=False, path_zflat=False, remove=[]):
     
     # poses[3,5,N] N是数据集个数, 3×3是旋转矩阵R，3×1(第4列)是平移矩阵T，3×1(第5列)是h,w,f
     # bds[2,N] 采样far,near信息,即深度值范围
@@ -315,6 +315,11 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     print('Loaded', basedir, bds.min(), bds.max())
     
     # print('poses_bound.npy:\n', poses[:,:,0])
+
+    # 删除指定的图像（不包含深度信息的图像）
+    poses = np.delete(poses, remove, axis=-1)
+    bds = np.delete(bds, remove, axis=-1)
+    imgs = np.delete(imgs, remove, axis=-1)
 
     # 重新排列相机姿态矩阵的列，调整方向 [x,y,z,t,whf]--->[y,-x,z,t,whf]
     # Correct rotation matrix ordering and move variable dim to axis 0
@@ -464,7 +469,7 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
             print(id_im, len(depth_list), np.min(depth_list), np.max(depth_list), np.mean(depth_list))
             data_list.append({"depth":np.array(depth_list), "coord":np.array(coord_list), "error":np.array(weight_list)})
         else:
-            zero_depth_ids.append(id_im)
+            zero_depth_ids.append(id_im - 1)
             print(id_im, len(depth_list))
     # json.dump(data_list, open(data_file, "w"))
     np.save(data_file, data_list)
