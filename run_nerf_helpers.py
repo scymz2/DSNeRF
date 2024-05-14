@@ -125,6 +125,8 @@ class NeRF(nn.Module):
 
     def forward(self, x):
         # 将输入数据分为位置和视角两部分
+        # split 相当于直接将输入数据 x 按照指定的维度分割为两部分 (x, y, z) 和 （θ, φ）
+        # xyz是三维的，θφ实际上也是三维的，只是在这里用两个数表示（是x'y'z'）
         input_pts, input_views = torch.split(x, [self.input_ch, self.input_ch_views], dim=-1)
         h = input_pts
         
@@ -140,7 +142,7 @@ class NeRF(nn.Module):
         if self.use_viewdirs:
             alpha = self.alpha_linear(h) # 计算透明度
             feature = self.feature_linear(h) # 提取特征
-            h = torch.cat([feature, input_views], -1) # 将视角数据与特征连接
+            h = torch.cat([feature, input_views], -1) # 将视角数据27维与特征连接
         
             for i, l in enumerate(self.views_linears):
                 h = self.views_linears[i](h)
@@ -287,12 +289,16 @@ def get_rays(H, W, focal, c2w):
         rays_d: Direction of the rays. Shape: (H, W, 3)
     """
     i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H))  # pytorch's meshgrid has indexing='ij'
+    # 转置网格矩阵，以匹配 PyTorch 的索引顺序
     i = i.t()
     j = j.t()
     dirs = torch.stack([(i-W*.5)/focal, -(j-H*.5)/focal, -torch.ones_like(i)], -1).to(device)
     # Rotate ray directions from camera frame to the world frame
+    # 三个点表示保留维度，-1表示最后一个维度， ：
+    # 世界坐标系下的方向
     rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  # dot product, equals to: [c2w.dot(dir) for dir in dirs]
     # Translate camera frame's origin to the world frame. It is the origin of all rays.
+    # 世界坐标系下的原点
     rays_o = c2w[:3,-1].expand(rays_d.shape)
     return rays_o, rays_d
 

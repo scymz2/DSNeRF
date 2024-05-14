@@ -409,7 +409,10 @@ def render_rays(ray_batch,
 
     if perturb > 0.:
         # get intervals between samples
+        # 选择最后一个维度上的从第二个元素到最后一个元素，以及最后一个维度上的从第一个元素到倒数第二个元素，然后取平均值
+        # 也就是说，mids是z_vals中每个元素和它后一个元素的中点
         mids = .5 * (z_vals[...,1:] + z_vals[...,:-1])
+        # upper 和 lower相当于把 near 和 far加到了z_vals的两端，因为之前算中点的时候把z_vals的两端去掉了
         upper = torch.cat([mids, z_vals[...,-1:]], -1)
         lower = torch.cat([z_vals[...,:1], mids], -1)
         # stratified samples in those intervals
@@ -652,7 +655,9 @@ def train():
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
+    # 监控训练
     wandb.init(project="nerf", config=args)
+    # colmap_llff 格式，DSNeRF自定义格式
     if args.dataset_type == 'colmap_llff':
         train_imgs, test_imgs, train_poses, test_poses, render_poses, depth_gts, bds = load_colmap_llff(args.datadir)
         poses = np.concatenate([train_poses, test_poses], axis=0)
@@ -677,10 +682,9 @@ def train():
     elif args.dataset_type == 'llff':
         if args.colmap_depth:
             depth_gts, zero_depth_ids = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
-            print("These images are ignored because they have no depth information:", zero_depth_ids) if zero_depth_ids else print()
         images, poses, bds, render_poses, i_test = load_llff_data(args.datadir, args.factor,
                                                                   recenter=True, bd_factor=.75,
-                                                                  spherify=args.spherify, remove=zero_depth_ids)
+                                                                  spherify=args.spherify)
         hwf = poses[0,:3,-1]
         poses = poses[:,:3,:4]
         print('Loaded llff', images.shape, render_poses.shape, hwf, args.datadir)
@@ -734,7 +738,7 @@ def train():
         near = 0.1
         far = 5.0
         if args.colmap_depth:
-            depth_gts = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
+            depth_gts, _ = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
     else:
         print('Unknown dataset type', args.dataset_type, 'exiting')
         return
@@ -968,6 +972,7 @@ def train():
                 else:
                     coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
 
+                # Select random subset of rays
                 coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
                 select_inds = np.random.choice(coords.shape[0], size=[N_rgb], replace=False)  # (N_rand,)
                 select_coords = coords[select_inds].long()  # (N_rand, 2)
