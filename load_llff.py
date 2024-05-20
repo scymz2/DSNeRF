@@ -67,11 +67,13 @@ def _minify(basedir, factors=[], resolutions=[]):
         
 def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     
-    # 存放数据集的位姿和边界信息(深度范围) [images_num,17] eg:[20,17]
+    # 存放数据集的位姿和边界信息(深度范围) [images_num,17] eg:[20,17] 最后两位存储边界信息
     poses_arr = np.load(os.path.join(basedir, 'poses_bounds.npy'))
 
     # [images_num,17]--->[3,5,images_num] eg:[3,5,20]
     # 3×3是旋转矩阵R,3×1(第4列)是平移矩阵T,3×1(第5列)是h,w,f
+    # reshape(-1,3,5) -1表示将自动计算第一个维度的大小，所以这步之后数组变成[images_num, 3, 5]
+    # transpose([1,2,0])则表示将数组的维度按照提供的顺序调换， 所以数组维度的结果如下
     poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1,2,0]) # 3 x 5 x N
 
     # bounds 边界(深度)范围[2,images_num] eg:[2,20]
@@ -114,8 +116,10 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         return
     
     sh = imageio.imread(imgfiles[0]).shape
-    poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1])
-    poses[2, 4, :] = poses[2, 4, :] * 1./factor
+    # poses: [3 5 N], 不用管数组形状如何变化，我们按照原来的方式访问，只不过改一下顺序，
+    # 在原来的[N,3,5]中，我们访问hw是 [:, :2, 4]
+    poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1]) # 更新相机的内参矩阵中与图像尺寸有关的部分, 修改h,w
+    poses[2, 4, :] = poses[2, 4, :] * 1./factor # 位姿矩阵的第四列的第三行，这通常对应于相机内参矩阵中的焦距, 修改f
     
     if not load_imgs:
         return poses, bds
@@ -127,7 +131,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         else:
             return imageio.imread(f)
         
-    imgs = imgs = [imread(f)[...,:3]/255. for f in imgfiles]
+    imgs = [imread(f)[...,:3]/255. for f in imgfiles]
     imgs = np.stack(imgs, -1)  
     
     print('Loaded image data', imgs.shape, poses[:,-1,0])
@@ -301,7 +305,7 @@ def spherify_poses(poses, bds):
     return poses_reset, new_poses, bds
     
 
-def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=False, path_zflat=False):
+def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=False, path_zflat=False, remove=[]):
     
     # poses[3,5,N] N是数据集个数, 3×3是旋转矩阵R，3×1(第4列)是平移矩阵T，3×1(第5列)是h,w,f
     # bds[2,N] 采样far,near信息,即深度值范围
@@ -312,6 +316,11 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     
     # print('poses_bound.npy:\n', poses[:,:,0])
 
+    # 删除指定的图像（不包含深度信息的图像）
+    poses = np.delete(poses, remove, axis=-1)
+    bds = np.delete(bds, remove, axis=-1)
+    imgs = np.delete(imgs, remove, axis=-1)
+
     # 重新排列相机姿态矩阵的列，调整方向 [x,y,z,t,whf]--->[y,-x,z,t,whf]
     # Correct rotation matrix ordering and move variable dim to axis 0
     poses = np.concatenate([poses[:, 1:2, :], -poses[:, 0:1, :], poses[:, 2:, :]], 1) # [-u, r, -t] -> [r, u, -t]
@@ -320,7 +329,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     poses = np.moveaxis(poses, -1, 0).astype(np.float32) # [N,3,5]
     imgs = np.moveaxis(imgs, -1, 0).astype(np.float32)   # [N,h,w,c]
     images = imgs
-    bds = np.moveaxis(bds, -1, 0).astype(np.float32)     # [N,2]
+    bds = np.moveaxis(bds, -1, 0).astype(np.float32)     # [N,2] 
     print("bds:", bds[0])
     
     # Rescale if bd_factor is provided
@@ -399,11 +408,11 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
 def get_poses(images):
     poses = []
     for i in images:
-        R = images[i].qvec2rotmat()
-        t = images[i].tvec.reshape([3,1])
+        R = images[i].qvec2rotmat() # 从四元数（`qvec`）转换得到旋转矩阵
+        t = images[i].tvec.reshape([3,1]) # 获取平移向量
         bottom = np.array([0,0,0,1.]).reshape([1,4])
-        w2c = np.concatenate([np.concatenate([R, t], 1), bottom], 0)
-        c2w = np.linalg.inv(w2c)
+        w2c = np.concatenate([np.concatenate([R, t], 1), bottom], 0) # 和平移向量水平拼接得到相机位姿矩阵，垂直拼接bottom
+        c2w = np.linalg.inv(w2c) # 求逆矩阵
         poses.append(c2w)
     return np.array(poses)
 
@@ -420,7 +429,7 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
     print("Mean Projection Error:", Err_mean)
     
     # 获取相机姿态
-    poses = get_poses(images)
+    poses = get_poses(images) # get_poses函数用于从images.bin文件中直接获取相机位姿，_load_data则会考虑图像的尺寸和缩放因子
     _, bds_raw, _ = _load_data(basedir, factor=factor) # factor=8 downsamples original imgs by 8x
     bds_raw = np.moveaxis(bds_raw, -1, 0).astype(np.float32)
     # print(bds_raw.shape)
@@ -434,6 +443,7 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
 
     # 初始化数据列表，用于存储处理后的深度信息
     data_list = []
+    zero_depth_ids = []
     for id_im in range(1, len(images)+1):
         depth_list = []
         coord_list = []
@@ -459,10 +469,11 @@ def load_colmap_depth(basedir, factor=8, bd_factor=.75):
             print(id_im, len(depth_list), np.min(depth_list), np.max(depth_list), np.mean(depth_list))
             data_list.append({"depth":np.array(depth_list), "coord":np.array(coord_list), "error":np.array(weight_list)})
         else:
+            zero_depth_ids.append(id_im - 1)
             print(id_im, len(depth_list))
     # json.dump(data_list, open(data_file, "w"))
     np.save(data_file, data_list)
-    return data_list
+    return data_list, zero_depth_ids
 
 def load_sensor_depth(basedir, factor=8, bd_factor=.75):
     data_file = Path(basedir) / 'colmap_depth.npy'

@@ -245,6 +245,7 @@ def create_nerf(args):
         embeddirs_fn, input_ch_views = get_embedder(args.multires_views, args.i_embed)
     output_ch = 5 if args.N_importance > 0 else 4 # (rgb, sigma, depth, weights) N_importance附加的细样本数
     skips = [4]
+    # 如果不存在现有模型就创建一个新的
     if args.alpha_model_path is None:
         model = NeRF(D=args.netdepth, W=args.netwidth,
                     input_ch=input_ch, output_ch=output_ch, skips=skips,
@@ -408,7 +409,10 @@ def render_rays(ray_batch,
 
     if perturb > 0.:
         # get intervals between samples
+        # 选择最后一个维度上的从第二个元素到最后一个元素，以及最后一个维度上的从第一个元素到倒数第二个元素，然后取平均值
+        # 也就是说，mids是z_vals中每个元素和它后一个元素的中点
         mids = .5 * (z_vals[...,1:] + z_vals[...,:-1])
+        # upper 和 lower相当于把 near 和 far加到了z_vals的两端，因为之前算中点的时候把z_vals的两端去掉了
         upper = torch.cat([mids, z_vals[...,-1:]], -1)
         lower = torch.cat([z_vals[...,:1], mids], -1)
         # stratified samples in those intervals
@@ -651,7 +655,9 @@ def train():
     # namespace 和dict不同， d['a'], namespace d.a
     args = parser.parse_args()
 
+    # 监控训练
     wandb.init(project="nerf", config=args)
+    # colmap_llff 格式，DSNeRF自定义格式
     if args.dataset_type == 'colmap_llff':
         train_imgs, test_imgs, train_poses, test_poses, render_poses, depth_gts, bds = load_colmap_llff(args.datadir)
         poses = np.concatenate([train_poses, test_poses], axis=0)
@@ -675,7 +681,7 @@ def train():
         print('NEAR FAR', near, far)
     elif args.dataset_type == 'llff':
         if args.colmap_depth:
-            depth_gts = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
+            depth_gts, zero_depth_ids = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
         images, poses, bds, render_poses, i_test = load_llff_data(args.datadir, args.factor,
                                                                   recenter=True, bd_factor=.75,
                                                                   spherify=args.spherify)
@@ -732,7 +738,7 @@ def train():
         near = 0.1
         far = 5.0
         if args.colmap_depth:
-            depth_gts = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
+            depth_gts, _ = load_colmap_depth(args.datadir, factor=args.factor, bd_factor=.75)
     else:
         print('Unknown dataset type', args.dataset_type, 'exiting')
         return
@@ -858,6 +864,10 @@ def train():
             print('get depth rays')
             rays_depth_list = []
             for i in i_train:
+                print(i_train)
+                print("Number of poses available:", len(poses))
+                print("Number of depth_gts available:", len(depth_gts))
+                print("Current index being accessed:", i)
                 rays_depth = np.stack(get_rays_by_coord_np(H, W, focal, poses[i,:3,:4], depth_gts[i]['coord']), axis=0) # 2 x N x 3
                 # print(rays_depth.shape)
                 rays_depth = np.transpose(rays_depth, [1,0,2])
@@ -962,6 +972,7 @@ def train():
                 else:
                     coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
 
+                # Select random subset of rays
                 coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
                 select_inds = np.random.choice(coords.shape[0], size=[N_rgb], replace=False)  # (N_rand,)
                 select_coords = coords[select_inds].long()  # (N_rand, 2)
