@@ -680,7 +680,7 @@ def train():
             print("These images are ignored because they have no depth information:", zero_depth_ids) if zero_depth_ids else print()
         images, poses, bds, render_poses, i_test = load_llff_data(args.datadir, args.factor,
                                                                   recenter=True, bd_factor=.75,
-                                                                  spherify=args.spherify, remove=zero_depth_ids)
+                                                                  spherify=args.spherify, zero_depth=zero_depth_ids)
         hwf = poses[0,:3,-1]
         poses = poses[:,:3,:4]
         print('Loaded llff', images.shape, render_poses.shape, hwf, args.datadir)
